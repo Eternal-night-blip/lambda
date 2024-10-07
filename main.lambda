@@ -22,4 +22,4 @@ def make_pair = λfirst.λsecond.λfunc.((func first) second);
 (((make_pair one) two)  select_first);
 (((make_pair one) two)  select_second);
 (λf.(f λf.f) λs.(s s));
-(λx.(x x) λs.(s s));
+(λf.(f λf.(f f)) λs.(s s));
