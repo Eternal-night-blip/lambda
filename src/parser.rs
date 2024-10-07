@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, process::exit};
 
 use crate::scanner::{
     Token::{self, *},
@@ -22,19 +22,19 @@ pub struct DefinitionExpr {
     pub func_expr: FunctionExpr,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct FunctionExpr {
     pub parameter: String,
     pub body: Box<Expr>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct ApplicationExpr {
     pub func_expr: Box<Expr>,
     pub argu_expr: Box<Expr>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum Expr {
     Literal(String),
     Function(FunctionExpr),
@@ -81,16 +81,21 @@ pub fn parse(tokens: &mut Vec<TokenWithContext>) -> AST {
         .map(|stmt| stmt.to_vec())
         .collect();
     match result.pop() {
-        None => panic!("没有EOF"),
+        None => {
+            println!("没有EOF");
+            exit(0)
+        }
         Some(mut tokens) => {
             trim(&mut tokens);
             if tokens.is_empty() {
-                panic!("没有EOF");
+                println!("没有EOF");
+                exit(0);
             }
 
             if tokens.len() == 1 {
                 if tokens[0].token != EOF {
-                    panic!("语法错误,应该是EOF,而不是{:?}", tokens[0])
+                    println!("应该是EOF,而不是{:?}", tokens[0]);
+                    exit(0)
                 }
 
                 let stmts = result;
@@ -98,7 +103,10 @@ pub fn parse(tokens: &mut Vec<TokenWithContext>) -> AST {
                     .iter()
                     .for_each(|stmt| match statement(&mut stmt.to_vec()) {
                         Ok(work) => ast.children.push(work),
-                        Err(err) => panic!("{err}"),
+                        Err(err) => {
+                            println!("{err}");
+                            exit(0)
+                        }
                     });
                 return ast;
             }
@@ -107,7 +115,10 @@ pub fn parse(tokens: &mut Vec<TokenWithContext>) -> AST {
                 .iter()
                 .find(|token_with_context| token_with_context.token == EOF)
             {
-                None => panic!("没有EOF"),
+                None => {
+                    println!("没有EOF");
+                    exit(0)
+                }
                 Some(_) => {
                     //确保EOF是最后一个Token
                     let token_with_context = tokens.pop().unwrap();
@@ -116,17 +127,24 @@ pub fn parse(tokens: &mut Vec<TokenWithContext>) -> AST {
                             let copied = tokens.clone();
                             match statement(&mut tokens) {
                                 Ok(_) => {
-                                    panic!(
-                                        "在第{}行第{}列,语句:{}后应该跟';'",
+                                    println!(
+                                        "语法错误:在第{}行第{}列,语句:{}后应该跟';'",
                                         token_with_context.line,
                                         token_with_context.column,
                                         tokens_to_string(copied)
-                                    )
+                                    );
+                                    exit(0)
                                 }
-                                Err(err) => panic!("{err}"),
+                                Err(err) => {
+                                    println!("{err}");
+                                    exit(0)
+                                }
                             }
                         }
-                        _ => panic!("EOF不在最后"),
+                        _ => {
+                            println!("EOF不在最后");
+                            exit(0)
+                        }
                     }
                 }
             }
@@ -150,7 +168,7 @@ fn statement(stmt: &mut Vec<TokenWithContext>) -> Result<Stmt, GrammarError> {
                 Err(err) => Err(err),
             },
             _ => Err(GrammarError::StatementError(format!(
-                "在第{}行 ,``{}``不是语句,缺少'def'或者'('\n",
+                "在第{}行 ,\"{}\"不是语句,缺少'def'或者'('\n",
                 token_with_context.line,
                 tokens_to_string(stmt.to_vec())
             ))),
@@ -171,7 +189,7 @@ fn definition(input: &mut Vec<TokenWithContext>) -> Result<DefinitionExpr, Gramm
         Def => {
             let name: String;
             let err_info_prefix = format!(
-                "在第{}行,在定义语句``{}``中\n:",
+                "在第{}行,在定义语句\"{}\"中\n:",
                 input[0].line,
                 tokens_to_string(input.to_vec())
             );
@@ -235,7 +253,7 @@ fn definition(input: &mut Vec<TokenWithContext>) -> Result<DefinitionExpr, Gramm
             }
         }
         _ => Err(GrammarError::DefinitionError(format!(
-            "在第{}行,``{}``不是定义语句,其之前缺少'def'\n",
+            "在第{}行,\"{}\"不是定义语句,其之前缺少'def'\n",
             input[0].line,
             tokens_to_string(input.to_vec())
         ))),
@@ -252,7 +270,7 @@ fn application(input: &mut Vec<TokenWithContext>) -> Result<ApplicationExpr, Gra
     match input[0].token {
         LeftParenthesis => {
             let err_info_prefix = format!(
-                "在第{}行,在应用语句``{}``中:\n",
+                "在第{}行,在应用语句\"{}\"中:\n",
                 input[0].line,
                 tokens_to_string(input.to_vec())
             );
@@ -332,7 +350,7 @@ fn application(input: &mut Vec<TokenWithContext>) -> Result<ApplicationExpr, Gra
             }
         }
         _ => Err(GrammarError::ApplicationError(format!(
-            "在第{}行,``{}``不是应用语句,其之前缺少'('\n",
+            "在第{}行,\"{}\"不是应用语句,其之前缺少'('\n",
             input[0].line,
             tokens_to_string(input.to_vec())
         ))),
@@ -378,7 +396,7 @@ fn expression(expr: &mut Vec<TokenWithContext>) -> Result<Expr, GrammarError> {
                 }
             }
             _ => Err(GrammarError::ExpressionError(format!(
-                "在第{}行,``{}``不是表达式,缺少'λ'或者'('\n",
+                "在第{}行,\"{}\"不是表达式,缺少'λ'或者'('\n",
                 token_with_context.line,
                 tokens_to_string(expr.to_vec())
             ))),
@@ -416,7 +434,7 @@ fn function(input: &mut Vec<TokenWithContext>) -> Result<FunctionExpr, GrammarEr
     match input[0].token {
         Lambda => {
             let err_info_prefix = format!(
-                "在第{}行,在函数表达式``{}``中:\n",
+                "在第{}行,在函数表达式\"{}\"中:\n",
                 input[0].line,
                 tokens_to_string(input.to_vec())
             );
@@ -474,7 +492,7 @@ fn function(input: &mut Vec<TokenWithContext>) -> Result<FunctionExpr, GrammarEr
             }
         }
         _ => Err(GrammarError::FunctionError(format!(
-            "在第{}行,``{}``不是函数表达式,其之前缺少'λ'\n",
+            "在第{}行,\"{}\"不是函数表达式,其之前缺少'λ'\n",
             input[0].line,
             tokens_to_string(input.to_vec())
         ))),
@@ -1160,7 +1178,7 @@ mod parser_tests {
             Ok(_) => panic!("应该有错误"),
             Err(err) => match err {
                 GrammarError::ExpressionError(err) => {
-                    assert_eq!(err, "在第1行,``.x``不是表达式,缺少'λ'或者'('\n");
+                    assert_eq!(err, "在第1行,\".x\"不是表达式,缺少'λ'或者'('\n");
                 }
                 _ => panic!("应该是ExpressionError"),
             },
@@ -1191,7 +1209,6 @@ mod parser_tests {
     }
 
     #[test]
-
     fn check_function() {
         // λx.x
         let tokens = &mut vec![
@@ -1501,7 +1518,7 @@ mod parser_tests {
             Ok(_) => panic!("应该有错误"),
             Err(err) => match err {
                 GrammarError::FunctionError(err) => {
-                    assert_eq!(err, "在第1行,``x.x``不是函数表达式,其之前缺少'λ'\n");
+                    assert_eq!(err, "在第1行,\"x.x\"不是函数表达式,其之前缺少'λ'\n");
                 }
                 _ => panic!("应该是FunctionError"),
             },
@@ -1535,7 +1552,7 @@ mod parser_tests {
             Ok(_) => panic!("应该有错误"),
             Err(err) => match err {
                 GrammarError::FunctionError(err) => {
-                    assert_eq!(err, "在第1行,在函数表达式``λ``中:\n缺失name,'.',body\n");
+                    assert_eq!(err, "在第1行,在函数表达式\"λ\"中:\n缺失name,'.',body\n");
                 }
                 _ => panic!("应该是FunctionError"),
             },
@@ -1575,7 +1592,7 @@ mod parser_tests {
                 GrammarError::FunctionError(err) => {
                     assert_eq!(
                         err,
-                        "在第1行,在函数表达式``λ.``中:\n此处应该是name(Literal),却是Dot\n"
+                        "在第1行,在函数表达式\"λ.\"中:\n此处应该是name(Literal),却是Dot\n"
                     );
                 }
                 _ => panic!("应该是FunctionError"),
@@ -1614,7 +1631,7 @@ mod parser_tests {
             Ok(_) => panic!("应该有错误"),
             Err(err) => match err {
                 GrammarError::FunctionError(err) => {
-                    assert_eq!(err, "在第1行,在函数表达式``λx``中:\n缺失'.',body\n");
+                    assert_eq!(err, "在第1行,在函数表达式\"λx\"中:\n缺失'.',body\n");
                 }
                 _ => panic!("应该是FunctionError"),
             },
@@ -1659,7 +1676,7 @@ mod parser_tests {
                 GrammarError::FunctionError(err) => {
                     assert_eq!(
                         err,
-                        "在第1行,在函数表达式``λx=``中:\n此处应该是'.',却是Equal\n"
+                        "在第1行,在函数表达式\"λx=\"中:\n此处应该是'.',却是Equal\n"
                     );
                 }
                 _ => panic!("应该是FunctionError"),
@@ -1703,7 +1720,7 @@ mod parser_tests {
             Ok(_) => panic!("应该有错误"),
             Err(err) => match err {
                 GrammarError::FunctionError(err) => {
-                    assert_eq!(err, "在第1行,在函数表达式``λx.``中:\n缺失body\n");
+                    assert_eq!(err, "在第1行,在函数表达式\"λx.\"中:\n缺失body\n");
                 }
                 _ => panic!("应该是FunctionError"),
             },
@@ -1758,7 +1775,7 @@ mod parser_tests {
                 GrammarError::FunctionError(err) => {
                     assert_eq!(
                         err,
-                        "在第1行,在函数表达式``λx. =``中:\n在第1行,``=``不是表达式,缺少'λ'或者'('\n"
+                        "在第1行,在函数表达式\"λx. =\"中:\n在第1行,\"=\"不是表达式,缺少'λ'或者'('\n"
                     );
                 }
                 _ => panic!("应该是FunctionError"),
@@ -1903,7 +1920,7 @@ mod parser_tests {
                 GrammarError::DefinitionError(err) => {
                     assert_eq!(
                         err,
-                        "在第1行,``identity =λx.x``不是定义语句,其之前缺少'def'\n"
+                        "在第1行,\"identity =λx.x\"不是定义语句,其之前缺少'def'\n"
                     );
                 }
                 _ => panic!("应该是DefinitionError"),
@@ -1940,7 +1957,7 @@ mod parser_tests {
                 GrammarError::DefinitionError(err) => {
                     assert_eq!(
                         err,
-                        "在第1行,在定义语句``def``中\n:仅有def,缺失name,'=',function\n"
+                        "在第1行,在定义语句\"def\"中\n:仅有def,缺失name,'=',function\n"
                     );
                 }
                 _ => panic!("应该是DefinitionError"),
@@ -1981,7 +1998,7 @@ mod parser_tests {
                 GrammarError::DefinitionError(err) => {
                     assert_eq!(
                         err,
-                        "在第1行,在定义语句``def λ``中\n:此处应该是name(Literal),但是Lambda\n"
+                        "在第1行,在定义语句\"def λ\"中\n:此处应该是name(Literal),但是Lambda\n"
                     );
                 }
                 _ => panic!("应该是DefinitionError"),
@@ -2027,7 +2044,7 @@ mod parser_tests {
                 GrammarError::DefinitionError(err) => {
                     assert_eq!(
                         err,
-                        "在第1行,在定义语句``def identity``中\n:缺失'=',function\n"
+                        "在第1行,在定义语句\"def identity\"中\n:缺失'=',function\n"
                     );
                 }
                 _ => panic!("应该是DefinitionError"),
@@ -2083,7 +2100,7 @@ mod parser_tests {
                 GrammarError::DefinitionError(err) => {
                     assert_eq!(
                         err,
-                        "在第1行,在定义语句``def identity .``中\n:此处应该是Equal,却是Dot\n"
+                        "在第1行,在定义语句\"def identity .\"中\n:此处应该是Equal,却是Dot\n"
                     );
                 }
                 _ => panic!("应该是DefinitionError"),
@@ -2139,7 +2156,7 @@ mod parser_tests {
                 GrammarError::DefinitionError(err) => {
                     assert_eq!(
                         err,
-                        "在第1行,在定义语句``def identity =``中\n:缺失function\n"
+                        "在第1行,在定义语句\"def identity =\"中\n:缺失function\n"
                     );
                 }
                 _ => panic!("应该是DefinitionError"),
@@ -2203,7 +2220,7 @@ mod parser_tests {
             Ok(_) => {}
             Err(err) => match err {
                 GrammarError::DefinitionError(err) => {
-                    assert_eq!(err, "在第1行,在定义语句``def identity = x``中\n:在第1行,``x``不是函数表达式,其之前缺少'λ'\n");
+                    assert_eq!(err, "在第1行,在定义语句\"def identity = x\"中\n:在第1行,\"x\"不是函数表达式,其之前缺少'λ'\n");
                 }
                 _ => panic!("应该是DefinitionError"),
             },
@@ -2694,6 +2711,146 @@ mod parser_tests {
             }
         );
 
+        //(λs.(s s) λx.(x x))
+        //
+        let tokens = &mut vec![
+            TokenWithContext {
+                token: Whitespace,
+                line: 1,
+                column: 1,
+            },
+            TokenWithContext {
+                token: Whitespace,
+                line: 1,
+                column: 2,
+            },
+            TokenWithContext {
+                token: LeftParenthesis,
+                line: 1,
+                column: 3,
+            },
+            TokenWithContext {
+                token: Whitespace,
+                line: 1,
+                column: 4,
+            },
+            TokenWithContext {
+                token: Lambda,
+                line: 1,
+                column: 5,
+            },
+            TokenWithContext {
+                token: Literal("s".to_string()),
+                line: 1,
+                column: 6,
+            },
+            TokenWithContext {
+                token: Dot,
+                line: 1,
+                column: 7,
+            },
+            TokenWithContext {
+                token: LeftParenthesis,
+                line: 1,
+                column: 8,
+            },
+            TokenWithContext {
+                token: Literal("s".to_string()),
+                line: 1,
+                column: 9,
+            },
+            TokenWithContext {
+                token: Whitespace,
+                line: 1,
+                column: 10,
+            },
+            TokenWithContext {
+                token: Literal("s".to_string()),
+                line: 1,
+                column: 11,
+            },
+            TokenWithContext {
+                token: RightParenthesis,
+                line: 1,
+                column: 12,
+            },
+            TokenWithContext {
+                token: Whitespace,
+                line: 1,
+                column: 13,
+            },
+            TokenWithContext {
+                token: Lambda,
+                line: 1,
+                column: 14,
+            },
+            TokenWithContext {
+                token: Literal("x".to_string()),
+                line: 1,
+                column: 15,
+            },
+            TokenWithContext {
+                token: Dot,
+                line: 1,
+                column: 16,
+            },
+            TokenWithContext {
+                token: LeftParenthesis,
+                line: 1,
+                column: 17,
+            },
+            TokenWithContext {
+                token: Literal("x".to_string()),
+                line: 1,
+                column: 18,
+            },
+            TokenWithContext {
+                token: Whitespace,
+                line: 1,
+                column: 19,
+            },
+            TokenWithContext {
+                token: Literal("x".to_string()),
+                line: 1,
+                column: 20,
+            },
+            TokenWithContext {
+                token: RightParenthesis,
+                line: 1,
+                column: 21,
+            },
+            TokenWithContext {
+                token: RightParenthesis,
+                line: 1,
+                column: 22,
+            },
+            TokenWithContext {
+                token: Whitespace,
+                line: 1,
+                column: 23,
+            },
+        ];
+        let expr = application(tokens);
+        assert_eq!(
+            expr.unwrap(),
+            ApplicationExpr {
+                func_expr: Box::new(Expr::Function(FunctionExpr {
+                    parameter: "s".to_string(),
+                    body: Box::new(Expr::Application(ApplicationExpr {
+                        func_expr: Box::new(Expr::Literal("s".to_string())),
+                        argu_expr: Box::new(Expr::Literal("s".to_string()))
+                    }))
+                })),
+                argu_expr: Box::new(Expr::Function(FunctionExpr {
+                    parameter: "x".to_string(),
+                    body: Box::new(Expr::Application(ApplicationExpr {
+                        func_expr: Box::new(Expr::Literal("x".to_string())),
+                        argu_expr: Box::new(Expr::Literal("x".to_string()))
+                    }))
+                }))
+            }
+        );
+
         //panic!
         // 不是应用语句 x y
         let tokens = &mut vec![
@@ -2737,7 +2894,7 @@ mod parser_tests {
             Ok(_) => panic!("应该有错误"),
             Err(err) => match err {
                 GrammarError::ApplicationError(err) => {
-                    assert_eq!(err, "在第1行,``x y``不是应用语句,其之前缺少'('\n");
+                    assert_eq!(err, "在第1行,\"x y\"不是应用语句,其之前缺少'('\n");
                 }
                 _ => panic!("应该是ApplicationError"),
             },
@@ -2771,7 +2928,7 @@ mod parser_tests {
             Ok(_) => panic!("应该有错误"),
             Err(err) => match err {
                 GrammarError::ApplicationError(err) => {
-                    assert_eq!(err, "在第1行,在应用语句``(``中:\n仅有'(',缺失function expression,argument expression,')'\n");
+                    assert_eq!(err, "在第1行,在应用语句\"(\"中:\n仅有'(',缺失function expression,argument expression,')'\n");
                 }
                 _ => panic!("应该是ApplicationError"),
             },
@@ -2814,7 +2971,7 @@ mod parser_tests {
             Ok(_) => panic!("应该有错误"),
             Err(err) => match err {
                 GrammarError::ApplicationError(err) => {
-                    assert_eq!(err, "在第1行,在应用语句``( =``中:\nfunction expression:\n在第1行,``=``不是表达式,缺少'λ'或者'('\n");
+                    assert_eq!(err, "在第1行,在应用语句\"( =\"中:\nfunction expression:\n在第1行,\"=\"不是表达式,缺少'λ'或者'('\n");
                 }
                 _ => panic!("应该是ApplicationError"),
             },
@@ -2859,7 +3016,7 @@ mod parser_tests {
                 GrammarError::ApplicationError(err) => {
                     assert_eq!(
                         err,
-                        "在第1行,在应用语句``( x``中:\n缺失argument expression,')'\n"
+                        "在第1行,在应用语句\"( x\"中:\n缺失argument expression,')'\n"
                     );
                 }
                 _ => panic!("应该是ApplicationError"),
@@ -2913,7 +3070,7 @@ mod parser_tests {
             Ok(_) => panic!("应该有错误"),
             Err(err) => match err {
                 GrammarError::ApplicationError(err) => {
-                    assert_eq!(err, "在第1行,在应用语句``( x =``中:\nargument expression:\n在第1行,``=``不是表达式,缺少'λ'或者'('\n");
+                    assert_eq!(err, "在第1行,在应用语句\"( x =\"中:\nargument expression:\n在第1行,\"=\"不是表达式,缺少'λ'或者'('\n");
                 }
                 _ => panic!("应该是ApplicationError"),
             },
@@ -2966,7 +3123,7 @@ mod parser_tests {
             Ok(_) => panic!("应该有错误"),
             Err(err) => match err {
                 GrammarError::ApplicationError(err) => {
-                    assert_eq!(err, "在第1行,在应用语句``( x y``中:\n缺失')'\n");
+                    assert_eq!(err, "在第1行,在应用语句\"( x y\"中:\n缺失')'\n");
                 }
                 _ => panic!("应该是ApplicationError"),
             },
@@ -3031,7 +3188,7 @@ mod parser_tests {
                 GrammarError::ApplicationError(err) => {
                     assert_eq!(
                         err,
-                        "在第1行,在应用语句``( x y .``中:\n此处应该是')',却是Dot\n"
+                        "在第1行,在应用语句\"( x y .\"中:\n此处应该是')',却是Dot\n"
                     );
                 }
                 _ => panic!("应该是ApplicationError"),
@@ -3223,7 +3380,7 @@ mod parser_tests {
             Ok(_) => panic!("应该有错误"),
             Err(err) => match err {
                 GrammarError::StatementError(err) => {
-                    assert_eq!(err, "在第1行 ,``x y``不是语句,缺少'def'或者'('\n");
+                    assert_eq!(err, "在第1行 ,\"x y\"不是语句,缺少'def'或者'('\n");
                 }
                 _ => panic!("应该是StatementError"),
             },
@@ -3254,7 +3411,6 @@ mod parser_tests {
     }
 
     #[test]
-    #[should_panic(expected = "语句:( x y )后应该跟';'")]
     fn check_parse() {
         // (x y ); (x y); EOF
         let tokens = &mut vec![
@@ -3375,106 +3531,5 @@ mod parser_tests {
                 ]
             }
         );
-
-        // panic!
-        // (x y); (x y) EOF
-        let tokens = &mut vec![
-            TokenWithContext {
-                token: Whitespace,
-                line: 1,
-                column: 1,
-            },
-            TokenWithContext {
-                token: Whitespace,
-                line: 1,
-                column: 2,
-            },
-            TokenWithContext {
-                token: LeftParenthesis,
-                line: 1,
-                column: 3,
-            },
-            TokenWithContext {
-                token: Whitespace,
-                line: 1,
-                column: 4,
-            },
-            TokenWithContext {
-                token: Literal("x".to_string()),
-                line: 1,
-                column: 5,
-            },
-            TokenWithContext {
-                token: Whitespace,
-                line: 1,
-                column: 6,
-            },
-            TokenWithContext {
-                token: Literal("y".to_string()),
-                line: 1,
-                column: 7,
-            },
-            TokenWithContext {
-                token: Whitespace,
-                line: 1,
-                column: 8,
-            },
-            TokenWithContext {
-                token: RightParenthesis,
-                line: 1,
-                column: 9,
-            },
-            TokenWithContext {
-                token: Semicolon,
-                line: 1,
-                column: 10,
-            },
-            TokenWithContext {
-                token: LeftParenthesis,
-                line: 1,
-                column: 11,
-            },
-            TokenWithContext {
-                token: Whitespace,
-                line: 1,
-                column: 12,
-            },
-            TokenWithContext {
-                token: Literal("x".to_string()),
-                line: 1,
-                column: 13,
-            },
-            TokenWithContext {
-                token: Whitespace,
-                line: 1,
-                column: 14,
-            },
-            TokenWithContext {
-                token: Literal("y".to_string()),
-                line: 1,
-                column: 15,
-            },
-            TokenWithContext {
-                token: Whitespace,
-                line: 1,
-                column: 16,
-            },
-            TokenWithContext {
-                token: RightParenthesis,
-                line: 1,
-                column: 17,
-            },
-            TokenWithContext {
-                token: Whitespace,
-                line: 1,
-                column: 18,
-            },
-            TokenWithContext {
-                token: EOF,
-                line: 1,
-                column: 19,
-            },
-        ];
-        parse(tokens);
     }
 }

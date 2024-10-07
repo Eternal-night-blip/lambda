@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::Add};
+use std::{fmt::Display, ops::Add, process::exit};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -32,7 +32,8 @@ impl Add for Token {
         } else if let (Token::Literal(x), Token::Literal(y)) = (self, other) {
             Token::Literal(x + &y)
         } else {
-            panic!("未定义的Token的Add操作");
+            println!("未定义的Token的Add操作");
+            exit(0)
         }
     }
 }
@@ -164,9 +165,12 @@ pub fn scan(input: String) -> Vec<TokenWithContext> {
                 current_column = 0;
                 token
             }
-            other => panic!(
-                "Unknown character `{other}` at line {current_line}, column {current_column}."
-            ),
+            other => {
+                println!(
+                    "在第{current_line}行,第{current_column}列,发现非法符号\"{other}\"."
+                );
+                exit(0);
+            }
         })
         .collect();
 
@@ -235,7 +239,9 @@ pub fn scan(input: String) -> Vec<TokenWithContext> {
             }
             current_index = end + 1;
         } else {
-            tokens.push(raw_tokens[current_index].clone());
+            if raw_tokens[current_index].token != Token::Line {
+                tokens.push(raw_tokens[current_index].clone());
+            }
             current_index += 1;
         }
     }
@@ -443,11 +449,6 @@ mod scanner_tests {
         assert_eq!(
             scan("\n".to_string()),
             vec![
-                TokenWithContext {
-                    token: Line,
-                    line: 1,
-                    column: 1
-                },
                 TokenWithContext {
                     token: EOF,
                     line: 2,
