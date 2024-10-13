@@ -97,12 +97,10 @@ fn evaluate_app(app_expr: ApplicationExpr, symbol_table: &mut SymbolTable) -> Ex
                         evaluate_app(new_app_expr, symbol_table)
                     }
                 },
-                None => {
-                    return Expr::Application(ApplicationExpr {
-                        func_expr: app_expr.func_expr,
-                        argu_expr,
-                    });
-                }
+                None => Expr::Application(ApplicationExpr {
+                    func_expr: app_expr.func_expr,
+                    argu_expr,
+                }),
             }
         }
 
@@ -134,11 +132,11 @@ fn evaluate_app(app_expr: ApplicationExpr, symbol_table: &mut SymbolTable) -> Ex
                         }
                         SymbolValue::Name(_) => {
                             //todo 下列代码合理吗？
-                            let result = Expr::Application(ApplicationExpr {
+
+                            Expr::Application(ApplicationExpr {
                                 func_expr: Box::new(Expr::Literal(name)),
                                 argu_expr,
-                            });
-                            return result;
+                            })
                         }
                         SymbolValue::Function(function_expr) => {
                             evaluate_func(function_expr.clone(), *argu_expr, symbol_table)
@@ -156,31 +154,22 @@ fn evaluate_app(app_expr: ApplicationExpr, symbol_table: &mut SymbolTable) -> Ex
 
 //检查模式(λx.(x x) λx.(x x))
 fn check_terminate(func_expr: Expr, argu_expr: Expr) {
-    match (func_expr.clone(), argu_expr.clone()) {
-        (Function(function_expr), Function(argument_expr)) => {
-            if function_expr == argument_expr {
-                let para = function_expr.parameter;
-                match *function_expr.body {
-                    Application(application_expr) => {
-                        match (*application_expr.func_expr, *application_expr.argu_expr) {
-                            (Literal(name1), Literal(name2)) => {
-                                if para == name1 && para == name2 {
-                                    let origin = ApplicationExpr {
-                                        func_expr: Box::new(func_expr),
-                                        argu_expr: Box::new(argu_expr),
-                                    };
-                                    println!("{}将进行无限计算\n", expr_to_string_app(origin));
-                                    exit(0)
-                                }
-                            }
-                            _ => {}
-                        }
+    if let (Function(function_expr), Function(argument_expr)) = (func_expr.clone(), argu_expr.clone()) {
+        if function_expr == argument_expr {
+            let para = function_expr.parameter;
+            if let Application(application_expr) = *function_expr.body {
+                if let (Literal(name1), Literal(name2)) = (*application_expr.func_expr, *application_expr.argu_expr) {
+                    if para == name1 && para == name2 {
+                        let origin = ApplicationExpr {
+                            func_expr: Box::new(func_expr),
+                            argu_expr: Box::new(argu_expr),
+                        };
+                        println!("{}将进行无限计算\n", expr_to_string_app(origin));
+                        exit(0)
                     }
-                    _ => {}
                 }
             }
         }
-        _ => {}
     }
 }
 
@@ -206,11 +195,11 @@ fn evaluate_func(
     };
 
     match result {
-        Literal(_) => return result, //还是说要判定是否在符号表?不判定是否是延迟计算
-        Function(_) => return result,
+        Literal(_) => result, //还是说要判定是否在符号表?不判定是否是延迟计算
+        Function(_) => result,
         Application(application_expr) => {
             println!("=> {}", expr_to_string_app(application_expr.clone()));
-            return evaluate_app(application_expr, symbol_table);
+            evaluate_app(application_expr, symbol_table)
         }
     }
 }
@@ -218,10 +207,10 @@ fn evaluate_func(
 fn beta_reduction_in_literal(from: String, to: Expr, name: String) -> Expr {
     if from == name {
         //对应λx.x,直接返回实参to
-        return to;
+        to
     } else {
         //对应λx.y,与实参无关,返回y
-        return Expr::Literal(name);
+        Expr::Literal(name)
     }
 }
 
@@ -234,20 +223,20 @@ fn beta_reduction_in_func(from: String, to: Expr, expr: FunctionExpr) -> Expr {
         Literal(inner_literal) => {
             if inner_literal == from && inner_literal != para {
                 let body = Box::new(to);
-                return Expr::Function(FunctionExpr {
+                Expr::Function(FunctionExpr {
                     parameter: para,
                     body,
-                });
+                })
             } else {
-                return Expr::Function(expr);
+                Expr::Function(expr)
             }
         }
         Function(inner_expr) => {
             let body = Box::new(beta_reduction_in_func(from, to, inner_expr));
-            return Expr::Function(FunctionExpr {
+            Expr::Function(FunctionExpr {
                 parameter: para,
                 body,
-            });
+            })
         }
 
         Application(inner_expr) => {
@@ -260,10 +249,10 @@ fn beta_reduction_in_func(from: String, to: Expr, expr: FunctionExpr) -> Expr {
             ));
             //判断是否需要进行alpha转换,不等则需要进行alpha转换
             if para == inner_scope {
-                return Expr::Function(FunctionExpr {
+                Expr::Function(FunctionExpr {
                     parameter: para,
                     body,
-                });
+                })
             } else {
                 let mut inner_expr_replaced = inner_expr;
                 inner_expr_replaced =
@@ -274,10 +263,10 @@ fn beta_reduction_in_func(from: String, to: Expr, expr: FunctionExpr) -> Expr {
                     inner_expr_replaced,
                     &mut inner_scope,
                 ));
-                return Expr::Function(FunctionExpr {
+                Expr::Function(FunctionExpr {
                     parameter: inner_scope,
                     body,
-                });
+                })
             }
         }
     }
@@ -302,46 +291,42 @@ fn beta_reduction_in_app(
                 {
                     //当from替换成to时与scope发生名称冲突,实现alpha转换,此时将scope进行重命名,然后回溯,这里就是把to原封不动地返回
                     *scope = format!("{scope}_for_alpha_conversion");
-                    return to;
+                    to
                 } else {
-                    let func_expr;
-                    let argu_expr;
-                    if name1 == from {
-                        func_expr = Box::new(to.clone());
+                    let func_expr = if name1 == from {
+                        Box::new(to.clone())
                     } else {
-                        func_expr = Box::new(Expr::Literal(name1));
-                    }
+                        Box::new(Expr::Literal(name1))
+                    };
 
-                    if name2 == from {
-                        argu_expr = Box::new(to);
+                    let argu_expr = if name2 == from {
+                        Box::new(to)
                     } else {
-                        argu_expr = Box::new(Expr::Literal(name2));
-                    }
+                        Box::new(Expr::Literal(name2))
+                    };
 
-                    return Expr::Application(ApplicationExpr {
+                    Expr::Application(ApplicationExpr {
                         func_expr,
                         argu_expr,
-                    });
+                    })
                 }
             } else {
-                let func_expr;
-                let argu_expr;
-                if name1 == from {
-                    func_expr = Box::new(to.clone());
+                let func_expr = if name1 == from {
+                    Box::new(to.clone())
                 } else {
-                    func_expr = Box::new(Expr::Literal(name1));
-                }
+                    Box::new(Expr::Literal(name1))
+                };
 
-                if name2 == from {
-                    argu_expr = Box::new(to);
+                let argu_expr = if name2 == from {
+                    Box::new(to)
                 } else {
-                    argu_expr = Box::new(Expr::Literal(name2));
-                }
+                    Box::new(Expr::Literal(name2))
+                };
 
-                return Expr::Application(ApplicationExpr {
+                Expr::Application(ApplicationExpr {
                     func_expr,
                     argu_expr,
-                });
+                })
             }
         }
         (Literal(func_expr), Function(argu_expr)) => {
@@ -349,40 +334,40 @@ fn beta_reduction_in_app(
             if inner_para != *scope {
                 let result = beta_reduction_in_func(from.clone(), to.clone(), argu_expr);
                 if func_expr == from {
-                    return Expr::Application(ApplicationExpr {
+                    Expr::Application(ApplicationExpr {
                         func_expr: Box::new(to),
                         argu_expr: Box::new(result),
-                    });
+                    })
                 } else {
-                    return Expr::Application(ApplicationExpr {
+                    Expr::Application(ApplicationExpr {
                         func_expr: Box::new(Expr::Literal(func_expr)),
                         argu_expr: Box::new(result),
-                    });
+                    })
                 }
             } else {
                 //内层形参覆盖外层形参,这意味着不替换了argu_expr
                 if func_expr == from {
-                    return Expr::Application(ApplicationExpr {
+                    Expr::Application(ApplicationExpr {
                         func_expr: Box::new(to),
                         argu_expr: Box::new(Expr::Function(argu_expr)),
-                    });
+                    })
                 } else {
-                    return Expr::Application(expr);
+                    Expr::Application(expr)
                 }
             }
         }
         (Literal(func_expr), Application(argu_expr)) => {
             let result = beta_reduction_in_app(from.clone(), to.clone(), argu_expr, scope);
             if func_expr == from {
-                return Expr::Application(ApplicationExpr {
+                Expr::Application(ApplicationExpr {
                     func_expr: Box::new(to),
                     argu_expr: Box::new(result),
-                });
+                })
             } else {
-                return Expr::Application(ApplicationExpr {
+                Expr::Application(ApplicationExpr {
                     func_expr: Box::new(Expr::Literal(func_expr)),
                     argu_expr: Box::new(result),
-                });
+                })
             }
         }
         (Function(func_expr), Literal(argu_expr)) => {
@@ -390,107 +375,106 @@ fn beta_reduction_in_app(
             if inner_para != *scope {
                 let result = beta_reduction_in_func(from.clone(), to.clone(), func_expr);
                 if argu_expr == from {
-                    return Expr::Application(ApplicationExpr {
+                    Expr::Application(ApplicationExpr {
                         func_expr: Box::new(result),
                         argu_expr: Box::new(to),
-                    });
+                    })
                 } else {
-                    return Expr::Application(ApplicationExpr {
+                    Expr::Application(ApplicationExpr {
                         func_expr: Box::new(result),
                         argu_expr: Box::new(Expr::Literal(argu_expr)),
-                    });
+                    })
                 }
             } else {
                 //内层形参覆盖外层形参,这意味着不替换了argu_expr
                 if argu_expr == from {
-                    return Expr::Application(ApplicationExpr {
+                    Expr::Application(ApplicationExpr {
                         func_expr: Box::new(Expr::Function(func_expr)),
                         argu_expr: Box::new(to),
-                    });
+                    })
                 } else {
-                    return Expr::Application(expr);
+                    Expr::Application(expr)
                 }
             }
         }
         (Application(func_expr), Literal(argu_expr)) => {
             let result = beta_reduction_in_app(from.clone(), to.clone(), func_expr, scope);
             if argu_expr == from {
-                return Expr::Application(ApplicationExpr {
+                Expr::Application(ApplicationExpr {
                     func_expr: Box::new(result),
                     argu_expr: Box::new(to),
-                });
+                })
             } else {
-                return Expr::Application(ApplicationExpr {
+                Expr::Application(ApplicationExpr {
                     func_expr: Box::new(result),
                     argu_expr: Box::new(Expr::Literal(argu_expr)),
-                });
+                })
             }
         }
         (Function(func_expr), Function(argu_expr)) => {
             let func_inner_para = func_expr.clone().parameter;
             let argu_inner_para = argu_expr.clone().parameter;
-            let new_func_expr;
-            let new_argu_expr;
-            if func_inner_para != *scope {
-                new_func_expr = beta_reduction_in_func(from.clone(), to.clone(), func_expr);
-            } else {
-                //内层形参覆盖外层形参
-                new_func_expr = Expr::Function(func_expr);
-            }
-            if argu_inner_para != *scope {
-                new_argu_expr = beta_reduction_in_func(from.clone(), to.clone(), argu_expr);
-            } else {
-                //内层形参覆盖外层形参
-                new_argu_expr = Expr::Function(argu_expr);
-            }
 
-            return Expr::Application(ApplicationExpr {
+            let new_func_expr = if func_inner_para != *scope {
+                beta_reduction_in_func(from.clone(), to.clone(), func_expr)
+            } else {
+                //内层形参覆盖外层形参
+                Expr::Function(func_expr)
+            };
+            let new_argu_expr = if argu_inner_para != *scope {
+                beta_reduction_in_func(from.clone(), to.clone(), argu_expr)
+            } else {
+                //内层形参覆盖外层形参
+                Expr::Function(argu_expr)
+            };
+
+            Expr::Application(ApplicationExpr {
                 func_expr: Box::new(new_func_expr),
                 argu_expr: Box::new(new_argu_expr),
-            });
+            })
         }
         (Function(func_expr), Application(argu_expr)) => {
             let func_inner_para = func_expr.clone().parameter;
-            let new_func_expr;
-            if func_inner_para != *scope {
-                new_func_expr = beta_reduction_in_func(from.clone(), to.clone(), func_expr);
+
+            let new_func_expr = if func_inner_para != *scope {
+                beta_reduction_in_func(from.clone(), to.clone(), func_expr)
             } else {
-                new_func_expr = Expr::Function(func_expr);
-            }
+                Expr::Function(func_expr)
+            };
 
             let argu_expr_replaced =
                 beta_reduction_in_app(from.clone(), to.clone(), argu_expr, scope);
-            return Expr::Application(ApplicationExpr {
+            Expr::Application(ApplicationExpr {
                 func_expr: Box::new(new_func_expr),
                 argu_expr: Box::new(argu_expr_replaced),
-            });
+            })
         }
         (Application(func_expr), Function(argu_expr)) => {
             let func_expr_replaced =
                 beta_reduction_in_app(from.clone(), to.clone(), func_expr, scope);
             let argu_inner_para = argu_expr.clone().parameter;
-            let new_argu_expr;
-            if argu_inner_para != *scope {
-                new_argu_expr = beta_reduction_in_func(from.clone(), to.clone(), argu_expr);
+
+            let new_argu_expr = if argu_inner_para != *scope {
+                beta_reduction_in_func(from.clone(), to.clone(), argu_expr)
             } else {
                 //内层形参覆盖外层形参
-                new_argu_expr = Expr::Function(argu_expr);
-            }
+                Expr::Function(argu_expr)
+            };
 
-            return Expr::Application(ApplicationExpr {
+            Expr::Application(ApplicationExpr {
                 func_expr: Box::new(func_expr_replaced),
                 argu_expr: Box::new(new_argu_expr),
-            });
+            })
         }
         (Application(func_expr), Application(argu_expr)) => {
             let func_expr_replaced =
                 beta_reduction_in_app(from.clone(), to.clone(), func_expr, scope);
             let argu_expr_replaced =
                 beta_reduction_in_app(from.clone(), to.clone(), argu_expr, scope);
-            return Expr::Application(ApplicationExpr {
+            Expr::Application(ApplicationExpr {
                 func_expr: Box::new(func_expr_replaced),
                 argu_expr: Box::new(argu_expr_replaced),
-            });
+            })
         }
     }
 }
@@ -502,14 +486,14 @@ fn rename_formal_para_app(from: String, to: String, expr: ApplicationExpr) -> Ap
     let func_expr_replaced = Box::new(rename_formal_para(from.clone(), to.clone(), *func_expr));
     let argu_expr_replaced = Box::new(rename_formal_para(from, to, *argu_expr));
 
-    return ApplicationExpr {
+    ApplicationExpr {
         func_expr: func_expr_replaced,
         argu_expr: argu_expr_replaced,
-    };
+    }
 }
 
 fn rename_formal_para(from: String, to: String, expr: Expr) -> Expr {
-    let func_expr_replaced = match expr {
+    match expr {
         Literal(name) => {
             if name == from {
                 Expr::Literal(to.clone())
@@ -521,8 +505,7 @@ fn rename_formal_para(from: String, to: String, expr: Expr) -> Expr {
         Application(application_expr) => {
             Expr::Application(rename_formal_para_app(from, to, application_expr))
         }
-    };
-    return func_expr_replaced;
+    }
 }
 
 fn rename_formal_para_func(from: String, to: String, expr: FunctionExpr) -> FunctionExpr {
@@ -542,12 +525,11 @@ fn replace_func_expr_app(to: FunctionExpr, expr: ApplicationExpr) -> Application
 }
 
 fn expr_to_string(expr: Expr) -> String {
-    let expr_string = match expr {
+    match expr {
         Literal(name) => name,
         Function(function_expr) => expr_to_string_func(function_expr),
         Application(application_expr) => expr_to_string_app(application_expr),
-    };
-    return expr_string;
+    }
 }
 
 fn expr_to_string_app(expr: ApplicationExpr) -> String {
@@ -557,7 +539,7 @@ fn expr_to_string_app(expr: ApplicationExpr) -> String {
     let func_expr_to_string = expr_to_string(*func_expr);
     let argu_expr_to_string = expr_to_string(*argu_expr);
 
-    return format!("({func_expr_to_string} {argu_expr_to_string})");
+    format!("({func_expr_to_string} {argu_expr_to_string})")
 }
 
 fn expr_to_string_func(expr: FunctionExpr) -> String {
@@ -565,7 +547,7 @@ fn expr_to_string_func(expr: FunctionExpr) -> String {
     let body = expr.body;
     let body_to_string = expr_to_string(*body);
 
-    return format!("λ{para}.{body_to_string}");
+    format!("λ{para}.{body_to_string}")
 }
 
 #[cfg(test)]
